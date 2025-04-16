@@ -15,6 +15,7 @@ const pool = mysql.createPool({
 
 async function processRecord(record, connection) {
   try {
+    console.log(`-- Đang xử lý HTML KeyID: ${record.KeyID} --`);
     const htmlPath = path.resolve(record.DuongDanHTMLMau);
     const outputPath = path.resolve(record.DuongDanKetQua);
 
@@ -31,29 +32,31 @@ async function processRecord(record, connection) {
     // Ghi file HTML kết quả
     await fs.writeFile(outputPath, htmlContent, 'utf-8');
 
-    // 
-    await connection.query(`UPDATE MailMage SET Status = 1 WHERE KeyID = ?`, [record.KeyID]);
+    console.log(`-- Đã xử lý HTML KeyID: ${record.KeyID} --`);
+    return 'ok';
 
-    console.log(`✅ Đã xử lý record KeyID: ${record.KeyID}`);
   } catch (err) {
-    console.error(`❌ Lỗi xử lý record KeyID: ${record.KeyID}`, err);
+    console.error(`-- Lỗi xử lý HTML KeyID: ${record.KeyID} --`, err);
+    return `lỗi: ${err.message}`;
   }
 }
 
 async function main() {
   const connection = await pool.getConnection();
   try {
-    const [rows] = await connection.query(`SELECT * FROM MailMage WHERE Status = 0`);
+    const [rows] = await connection.query(`SELECT * FROM MailMage WHERE Status = '0'`);
 
     for (const record of rows) {
-      await processRecord(record, connection); // chạy tuần tự
+      const result = await processRecord(record, connection); // chạy tuần tự
+
+      await connection.query(`UPDATE MailMage SET Status = ? WHERE KeyID = ?`, [result, record.KeyID]);
     }
   } catch (err) {
     console.error('❌ Lỗi truy vấn MySQL:', err);
   } finally {
     connection.release();
-    await pool.end(); 
+    // await pool.end(); 
   }
 }
 
-main();
+module.exports = { main }

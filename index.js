@@ -1,12 +1,15 @@
 // tool.js
 
+const mailmage = require("./mailmage.js")
+const sendmail = require("./sendmail.js")
+
 async function main() {
-    console.log("Đang chạy hàm main vào lúc:", new Date().toLocaleString());
     
-    // Giả lập xử lý mất 2-3 giây
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    console.log("Hoàn thành hàm main vào lúc:", new Date().toLocaleString());
+
+  await mailmage.main()
+  await sendmail.main()
+
+
   }
   
   async function loop() {
@@ -16,5 +19,6 @@ async function main() {
     }
   }
   
-  main();
+  console.log("\n\n--- Chương trình bắt đầu chạy --- \n\n")
+  loop();
   

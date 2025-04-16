@@ -14,6 +14,7 @@ const pool = mysql.createPool({
 });
 
 async function sendEmail(record, attachments) {
+  console.log(`-- Đang gửi mail: ${record.KeyID} --`)
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -37,10 +38,10 @@ async function sendEmail(record, attachments) {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Đã gửi: ${record.KeyID} | ${info.messageId}`);
+    console.log(`-- Đã gửi mail: ${record.KeyID} | ${info.messageId} --`);
     return 'ok';
   } catch (err) {
-    console.error(`❌ Lỗi gửi: ${record.KeyID}`, err.message);
+    console.error(`-- Lỗi gửi mail: ${record.KeyID} --`, err.message);
     return `lỗi: ${err.message}`;
   }
 }
@@ -60,8 +61,9 @@ async function main() {
     console.error('❌ Lỗi hệ thống:', err.message);
   } finally {
     connection.release();
-    await pool.end(); 
+    // await pool.end(); 
   }
 }
 
-main();
+
+module.exports = { main }
