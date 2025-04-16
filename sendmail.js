@@ -2,15 +2,17 @@ const mysql = require('mysql2/promise');
 const nodemailer = require('nodemailer');
 const path = require('path');
 const fs = require('fs/promises');
+require('dotenv').config()
 
 // Kết nối MySQL
 const pool = mysql.createPool({
-  host: '127.0.0.1',
-  port: 8889,
-  user: 'root',
-  password: 'root',
-  database: 'CKSCA',
-  socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock',
+  host: process.env.db_host,
+  port: process.env.db_port,
+  user: process.env.db_user,
+  password: process.env.db_password,
+  database: process.env.db_database,
+  socketPath: process.env.db_socket, // ✅ dùng socket thay vì host/port
+
 });
 
 async function sendEmail(record, attachments) {

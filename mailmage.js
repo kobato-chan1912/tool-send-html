@@ -1,15 +1,16 @@
 const mysql = require('mysql2/promise');
 const fs = require('fs/promises');
 const path = require('path');
+require('dotenv').config()
 
 // Thiết lập kết nối MySQL
 const pool = mysql.createPool({
-  host: '127.0.0.1',
-  port: 8889,
-  user: 'root',
-  password: 'root',
-  database: 'CKSCA',
-  socketPath: '/Applications/MAMP/tmp/mysql/mysql.sock', // ✅ dùng socket thay vì host/port
+  host: process.env.db_host,
+  port: process.env.db_port,
+  user: process.env.db_user,
+  password: process.env.db_password,
+  database: process.env.db_database,
+  socketPath: process.env.db_socket, // ✅ dùng socket thay vì host/port
 
 });
 
