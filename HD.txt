@@ -5,3 +5,8 @@ https://nodejs.org/en
 https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox-0.12.6-1.msvc2015-win64.exe
 
 (Giu nguyen path cai dat khong doi)
+
+
+3 - Lay mail api 
+- Vao bao mat => bat 2FA 
+- Tao app password: https://myaccount.google.com/apppasswords
