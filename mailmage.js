@@ -1,11 +1,9 @@
 const sql = require('mssql/msnodesqlv8');
 const fs = require('fs/promises');
 const path = require('path');
-const wkhtmltopdf = require('wkhtmltopdf');
 require('dotenv').config();
+const { exec } = require('child_process');
 
-// Chỉ định đúng path tới wkhtmltopdf.exe
-wkhtmltopdf.command = 'C:\\Program Files\\wkhtmltopdf\\bin\\wkhtmltopdf.exe';
 
 const pool = new sql.ConnectionPool({
   connectionString: process.env.CONNECTION_STRING
@@ -31,17 +29,28 @@ async function processRecord(record, connection) {
       }
     }
 
-    // Tạo PDF từ HTML
+
+    // Tạo file HTML tạm thời
+    const tempHtmlPath = path.join(outputFolder, `${record.KeyID}_temp.html`);
+    await fs.writeFile(tempHtmlPath, htmlContent, 'utf-8');
+
+
+    // Chạy command để tạo PDF từ HTML tạm thời
+    const command = `"C:\\Program Files\\wkhtmltopdf\\bin\\wkhtmltopdf.exe" --enable-local-file-access "${tempHtmlPath}" "${pdfOutputPath}"`;
+
     await new Promise((resolve, reject) => {
-      wkhtmltopdf(htmlContent, {
-        output: pdfOutputPath,
-        enableLocalFileAccess: true // Cho phép đọc file cục bộ như hình ảnh trong máy
-      }, (err) => {
-        if (err) return reject(err);
+      exec(command, (err, stdout, stderr) => {
+        if (err) {
+          console.error(`❌ Lỗi tạo PDF: ${stderr}`);
+          return reject(err);
+        }
         resolve();
       });
     });
-    
+
+    // Xóa file HTML tạm thời
+    await fs.unlink(tempHtmlPath);
+
 
     console.log(`-- Đã tạo PDF: ${pdfOutputPath} --`);
 
@@ -97,5 +106,5 @@ async function main() {
   }
 }
 
-main();
+main()
 module.exports = { main };
