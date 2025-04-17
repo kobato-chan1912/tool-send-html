@@ -1,17 +1,12 @@
-const mysql = require('mysql2/promise');
+const sql = require('mssql/msnodesqlv8');
 const nodemailer = require('nodemailer');
 const path = require('path');
 const fs = require('fs/promises');
-require('dotenv').config()
+require('dotenv').config();
 
-// Kết nối MySQL
-const pool = mysql.createPool({
-  host: process.env.db_host,
-  port: process.env.db_port,
-  user: process.env.db_user,
-  password: process.env.db_password,
-  database: process.env.db_database,
-  socketPath: process.env.db_socket, // ✅ dùng socket thay vì host/port
+// Connect SQL Server
+const pool = new sql.ConnectionPool({
+  connectionString: process.env.CONNECTION_STRING
 
 });
 
@@ -21,7 +16,7 @@ async function sendEmail(record, attachments) {
     service: 'gmail',
     auth: {
       user: record.EmailGui,
-      pass: record.EmailAppPassword
+      pass: record.EmailAPI
     }
   });
 
@@ -30,11 +25,11 @@ async function sendEmail(record, attachments) {
     to: record.EmailNhan,
     cc: record.EmailNhanCC || undefined,
     bcc: record.EmailNhanBCC || undefined,
-    subject: 'Mail từ Tool MrSon',
+    subject: record.TieuDeEmail,
     html: record.NoiDungHTML,
     attachments: attachments.map(file => ({
       filename: path.basename(file.DuongDan),
-      path: file.DuongDan
+      path: file.DuongDan.replace(/^[^\w]*([A-Za-z]:\\)/, '$1')
     }))
   };
 
@@ -49,23 +44,39 @@ async function sendEmail(record, attachments) {
 }
 
 async function main() {
-  const connection = await pool.getConnection();
   try {
-    const [emails] = await connection.query(`SELECT * FROM SendEmail WHERE TrangThai = '0'`);
+    await pool.connect();
+    const result = await pool.request()
+      .query(`SELECT * FROM SendEmail WHERE TrangThai = '0'`);
+
+    const emails = result.recordset;
 
     for (const record of emails) {
-      const [files] = await connection.query(`SELECT * FROM FileDinhKemEmail WHERE KeyID_SendEmail = ?`, [record.KeyID]);
-      const result = await sendEmail(record, files);
+      const filesResult = await pool.request()
+        .input('KeyID_SendEmail', sql.UniqueIdentifier, record.KeyID)
+        .query(`SELECT * FROM FileDinhKemEmail WHERE KeyID_SendEmail = @KeyID_SendEmail`);
 
-      await connection.query(`UPDATE SendEmail SET TrangThai = ? WHERE KeyID = ?`, [result, record.KeyID]);
+      const files = filesResult.recordset;
+
+      const sendResult = await sendEmail(record, files);
+
+      // Call procedure ReturnStatusSendEmail
+      await pool.request()
+        .input('KeyID_SendEmail', sql.UniqueIdentifier, record.KeyID)
+        .input('TrangThai', sql.NVarChar, sendResult)
+        .execute('ReturnStatusSendEmail');
+
+      console.log(`-- Đã gọi procedure [ReturnStatusSendEmail] với KeyID: ${KeyID} --`);
+
     }
+
   } catch (err) {
-    console.error('❌ Lỗi hệ thống:', err.message);
+    // console.error('❌ Lỗi hệ thống:', err.message);
   } finally {
-    connection.release();
-    // await pool.end(); 
+    pool.close(); // close connect
   }
 }
+
 
 
 module.exports = { main }

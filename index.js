@@ -1,4 +1,4 @@
-// tool.js
+
 
 const mailmage = require("./mailmage.js")
 const sendmail = require("./sendmail.js")
@@ -15,7 +15,7 @@ async function main() {
   async function loop() {
     while (true) {
       await main();
-      await new Promise(resolve => setTimeout(resolve, 5000)); // đợi 5 giây sau khi main() hoàn thành
+      await new Promise(resolve => setTimeout(resolve, 5000)); // 
     }
   }
   
