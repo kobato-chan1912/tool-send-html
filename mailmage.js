@@ -8,7 +8,6 @@ const execAsync = promisify(exec);
 
 const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
-const libre = require('libreoffice-convert');
 
 const pool = new sql.ConnectionPool({
   connectionString: process.env.CONNECTION_STRING
@@ -106,7 +105,7 @@ async function main() {
       const result = await processRecord(record, connection);
 
       if (result.status === 'ok') {
-        // await callProcedure(connection, record.KeyID, result.fileName);
+        await callProcedure(connection, record.KeyID, result.fileName);
       }
     }
 
@@ -117,5 +116,5 @@ async function main() {
   }
 }
 
-main()
+// main()
 module.exports = { main };
