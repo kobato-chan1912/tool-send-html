@@ -1,13 +1,17 @@
 {
   "dependencies": {
+    "docx-pdf": "^0.0.1",
+    "docxtemplater": "^3.61.1",
     "dotenv": "^16.5.0",
     "fs": "^0.0.1-security",
     "html-pdf": "^3.0.1",
+    "libreoffice-convert": "^1.6.1",
     "msnodesqlv8": "^4.5.0",
     "mssql": "^11.0.1",
     "mysql2": "^3.14.0",
     "nodemailer": "^6.10.1",
     "path": "^0.12.7",
+    "pizzip": "^3.1.8",
     "puppeteer": "^24.6.1"
   }
 }

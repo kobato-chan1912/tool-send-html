@@ -3,107 +3,78 @@ const fs = require('fs/promises');
 const path = require('path');
 require('dotenv').config();
 const { exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 
-const puppeteer = require('puppeteer');
+const PizZip = require('pizzip');
+const Docxtemplater = require('docxtemplater');
+const libre = require('libreoffice-convert');
 
 const pool = new sql.ConnectionPool({
   connectionString: process.env.CONNECTION_STRING
 });
 
+
 async function processRecord(record, connection) {
   try {
-    console.log(`-- Đang xử lý HTML KeyID: ${record.KeyID} --`);
+    console.log(`-- Đang xử lý Word KeyID: ${record.KeyID} --`);
 
-    const htmlPath = path.resolve(record.DuongDanHTMLMau);
+    const templatePath = path.resolve(record.DuongDanHTMLMau); // .docx gốc
     const outputFolder = path.resolve(record.DuongDanKetQua);
-    const pdfFileName = `${record.KeyID}.pdf`;
-    const pdfOutputPath = path.join(outputFolder, pdfFileName);
-    const outputHtmlPath = path.join(outputFolder, `${record.KeyID}.html`);
+    const outputDocxPath = path.join(outputFolder, `${record.KeyID}.docx`);
+    const pdfOutputPath = path.join(outputFolder, `${record.KeyID}.pdf`);
 
+    await fs.mkdir(outputFolder, { recursive: true });
 
-    let htmlContent = await fs.readFile(htmlPath, 'utf-8');
+    // 1. Đọc file Word mẫu
+    const content = await fs.readFile(templatePath, 'binary');
+    const zip = new PizZip(content);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true
+    });
 
-    // Mảng lưu nội dung bị thay thế
-    const placeholders = [];
-
-    // Hàm thay thế bằng placeholder
-    function replaceWithPlaceholder(html, pattern) {
-      return html.replace(pattern, (match, p1) => {
-        const placeholder = `__PLACEHOLDER_${placeholders.length}__`;
-        placeholders.push(p1); // lưu giá trị gốc
-        return match.replace(p1, placeholder);
-      });
-    }
-
-    // 1. Tạm thời thay thế tất cả src="", href="", url(...) khỏi htmlContent
-    htmlContent = replaceWithPlaceholder(htmlContent, /src="(.*?)"/g);
-    htmlContent = replaceWithPlaceholder(htmlContent, /href="(.*?)"/g);
-    htmlContent = replaceWithPlaceholder(htmlContent, /url\((['"]?)(.*?)\1\)/g);
-
-    // 2. Replace các keys như BB01, CCC12...
+    // 2. Lấy dữ liệu từ record để inject
+    const data = {};
     for (const key in record) {
       if (/^[A-Z]{2,3}\d{2}$/.test(key)) {
-        const value = record[key] || '';
-        const regex = new RegExp(key, 'g');
-        htmlContent = htmlContent.replace(regex, value);
+        data[key] = record[key] || '';
       }
     }
 
-    // 3. Khôi phục lại các chuỗi đã thay bằng placeholder
-    htmlContent = htmlContent.replace(/__PLACEHOLDER_(\d+)__/g, (_, index) => {
-      return placeholders[parseInt(index)];
-    });
+    // 3. Thay nội dung
+    doc.render(data);
 
 
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--allow-file-access-from-files']
-    });
+    const bufferDocx = doc.getZip().generate({ type: 'nodebuffer' });
 
-    const page = await browser.newPage();
+    // 4. Ghi file Word đã render
+    await fs.writeFile(outputDocxPath, bufferDocx);
 
-    // Load HTML từ nội dung, set base URL để hỗ trợ hình ảnh local
+    // 5. Convert PDF
+    const scriptPath = path.resolve(__dirname, 'convert.ps1');
+    const command = `powershell -ExecutionPolicy Bypass -File "${scriptPath}" -inputPath "${outputDocxPath}" -outputPdfPath "${pdfOutputPath}"`;
 
+    await execAsync(command);
 
-    await fs.writeFile(outputHtmlPath, htmlContent, 'utf-8');
-
-    await page.goto(outputHtmlPath, {
-      waitUntil: ['domcontentloaded', 'networkidle0']
-    });
-
-
-
-
-
-    page.$$('selector', page => page.style.pageBreakBefore = 'always')
-
-
-
-    await page.pdf({
-      path: pdfOutputPath,
-      width: '200mm',
-      height: '297mm',
-      printBackground: false
-    });
-
-
-    await fs.unlink(outputHtmlPath);
-    await browser.close();
-
+   
     console.log(`-- Đã tạo PDF: ${pdfOutputPath} --`);
+
+    await fs.unlink(outputDocxPath)
 
     return {
       status: 'ok',
-      fileName: pdfFileName
+      fileName: `${record.KeyID}.pdf`
     };
   } catch (err) {
-    console.error(`-- Lỗi xử lý KeyID: ${record.KeyID} --`, err.message);
+    console.error(`❌ Lỗi xử lý Word KeyID: ${record.KeyID} --`, err.message);
     return {
       status: 'error',
       error: err.message
     };
   }
 }
+
 
 
 async function callProcedure(connection, KeyID, fileNameOnly) {
@@ -135,7 +106,7 @@ async function main() {
       const result = await processRecord(record, connection);
 
       if (result.status === 'ok') {
-        await callProcedure(connection, record.KeyID, result.fileName);
+        // await callProcedure(connection, record.KeyID, result.fileName);
       }
     }
 
@@ -146,5 +117,5 @@ async function main() {
   }
 }
 
-// main()
+main()
 module.exports = { main };
