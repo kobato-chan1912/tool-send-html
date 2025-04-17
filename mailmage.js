@@ -1,22 +1,28 @@
 const sql = require('mssql/msnodesqlv8');
 const fs = require('fs/promises');
 const path = require('path');
+const wkhtmltopdf = require('wkhtmltopdf');
 require('dotenv').config();
+
+// Chỉ định đúng path tới wkhtmltopdf.exe
+wkhtmltopdf.command = 'C:\\Program Files\\wkhtmltopdf\\bin\\wkhtmltopdf.exe';
 
 const pool = new sql.ConnectionPool({
   connectionString: process.env.CONNECTION_STRING
 });
 
-
 async function processRecord(record, connection) {
   try {
     console.log(`-- Đang xử lý HTML KeyID: ${record.KeyID} --`);
+
     const htmlPath = path.resolve(record.DuongDanHTMLMau);
-    const outputPath = path.resolve(record.DuongDanKetQua);
+    const outputFolder = path.resolve(record.DuongDanKetQua);
+    const pdfFileName = `${record.KeyID}.pdf`;
+    const pdfOutputPath = path.join(outputFolder, pdfFileName);
 
     let htmlContent = await fs.readFile(htmlPath, 'utf-8');
 
-    // Replace all Key BB01, CCC12, ...
+    // Replace all key kiểu BB01, CCC12...
     for (const key in record) {
       if (/^[A-Z]{2,3}\d{2}$/.test(key)) {
         const value = record[key] || '';
@@ -25,27 +31,43 @@ async function processRecord(record, connection) {
       }
     }
 
-    // Rewrite HTML
-    await fs.writeFile(outputPath, htmlContent, 'utf-8');
+    // Tạo PDF từ HTML
+    await new Promise((resolve, reject) => {
+      wkhtmltopdf(htmlContent, {
+        output: pdfOutputPath,
+        enableLocalFileAccess: true // Cho phép đọc file cục bộ như hình ảnh trong máy
+      }, (err) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+    
 
-    console.log(`-- Đã xử lý HTML KeyID: ${record.KeyID} --`);
-    return 'ok';
+    console.log(`-- Đã tạo PDF: ${pdfOutputPath} --`);
+
+    return {
+      status: 'ok',
+      fileName: pdfFileName
+    };
   } catch (err) {
-    console.error(`-- Lỗi xử lý HTML KeyID: ${record.KeyID} --`, err);
-    return `lỗi: ${err.message}`;
+    console.error(`-- Lỗi xử lý KeyID: ${record.KeyID} --`, err.message);
+    return {
+      status: 'error',
+      error: err.message
+    };
   }
 }
 
-async function callProcedure(connection, KeyID, DuongDan) {
+async function callProcedure(connection, KeyID, fileNameOnly) {
   try {
     await connection
       .request()
       .input('KeyID_MailMage', sql.UniqueIdentifier, KeyID)
-      .input('DuongDan', sql.NVarChar(500), DuongDan)
+      .input('DuongDan', sql.NVarChar(500), fileNameOnly)
       .execute('ReturnLinkPDFFromHTML');
-    console.log(`-- Đã gọi procedure [ReturnLinkPDFFromHTML] với KeyID: ${KeyID} --`);
+    console.log(`-- Đã gọi procedure với KeyID: ${KeyID}, File: ${fileNameOnly} --`);
   } catch (err) {
-    console.error('❌ Lỗi khi gọi procedure:', err);
+    console.error('❌ Lỗi gọi procedure:', err.message);
   }
 }
 
@@ -63,18 +85,17 @@ async function main() {
     for (const record of rows) {
       const result = await processRecord(record, connection);
 
-      if (result === 'ok') {
-        await callProcedure(connection, record.KeyID, record.DuongDanKetQua);
+      if (result.status === 'ok') {
+        await callProcedure(connection, record.KeyID, result.fileName);
       }
     }
 
   } catch (err) {
-    console.error('❌ Lỗi kết nối SQL Server:', err);
+    console.error('❌ Lỗi kết nối SQL Server:', err.message);
   } finally {
     pool.close();
   }
 }
 
-
-main()
+main();
 module.exports = { main };
