@@ -64,7 +64,8 @@ async function main() {
       await pool.request()
         .input('KeyID_SendEmail', sql.UniqueIdentifier, record.KeyID)
         .input('TrangThai', sql.NVarChar, sendResult)
-        .execute('ReturnStatusSendEmail');
+        .query(`EXEC ReturnStatusSendEmail @KeyID_SendEmail, @TrangThai`);
+
 
       console.log(`-- Đã gọi procedure [ReturnStatusSendEmail] với KeyID: ${KeyID} --`);
 

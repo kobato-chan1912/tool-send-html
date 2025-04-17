@@ -4,6 +4,7 @@ const path = require('path');
 require('dotenv').config();
 const { exec } = require('child_process');
 
+const puppeteer = require('puppeteer');
 
 const pool = new sql.ConnectionPool({
   connectionString: process.env.CONNECTION_STRING
@@ -17,10 +18,29 @@ async function processRecord(record, connection) {
     const outputFolder = path.resolve(record.DuongDanKetQua);
     const pdfFileName = `${record.KeyID}.pdf`;
     const pdfOutputPath = path.join(outputFolder, pdfFileName);
+    const outputHtmlPath = path.join(outputFolder, `${record.KeyID}.html`);
+
 
     let htmlContent = await fs.readFile(htmlPath, 'utf-8');
 
-    // Replace all key kiểu BB01, CCC12...
+    // Mảng lưu nội dung bị thay thế
+    const placeholders = [];
+
+    // Hàm thay thế bằng placeholder
+    function replaceWithPlaceholder(html, pattern) {
+      return html.replace(pattern, (match, p1) => {
+        const placeholder = `__PLACEHOLDER_${placeholders.length}__`;
+        placeholders.push(p1); // lưu giá trị gốc
+        return match.replace(p1, placeholder);
+      });
+    }
+
+    // 1. Tạm thời thay thế tất cả src="", href="", url(...) khỏi htmlContent
+    htmlContent = replaceWithPlaceholder(htmlContent, /src="(.*?)"/g);
+    htmlContent = replaceWithPlaceholder(htmlContent, /href="(.*?)"/g);
+    htmlContent = replaceWithPlaceholder(htmlContent, /url\((['"]?)(.*?)\1\)/g);
+
+    // 2. Replace các keys như BB01, CCC12...
     for (const key in record) {
       if (/^[A-Z]{2,3}\d{2}$/.test(key)) {
         const value = record[key] || '';
@@ -29,28 +49,46 @@ async function processRecord(record, connection) {
       }
     }
 
-
-    // Tạo file HTML tạm thời
-    const tempHtmlPath = path.join(outputFolder, `${record.KeyID}_temp.html`);
-    await fs.writeFile(tempHtmlPath, htmlContent, 'utf-8');
-
-
-    // Chạy command để tạo PDF từ HTML tạm thời
-    const command = `"C:\\Program Files\\wkhtmltopdf\\bin\\wkhtmltopdf.exe" --enable-local-file-access "${tempHtmlPath}" "${pdfOutputPath}"`;
-
-    await new Promise((resolve, reject) => {
-      exec(command, (err, stdout, stderr) => {
-        if (err) {
-          console.error(`❌ Lỗi tạo PDF: ${stderr}`);
-          return reject(err);
-        }
-        resolve();
-      });
+    // 3. Khôi phục lại các chuỗi đã thay bằng placeholder
+    htmlContent = htmlContent.replace(/__PLACEHOLDER_(\d+)__/g, (_, index) => {
+      return placeholders[parseInt(index)];
     });
 
-    // Xóa file HTML tạm thời
-    await fs.unlink(tempHtmlPath);
 
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--allow-file-access-from-files']
+    });
+
+    const page = await browser.newPage();
+
+    // Load HTML từ nội dung, set base URL để hỗ trợ hình ảnh local
+
+
+    await fs.writeFile(outputHtmlPath, htmlContent, 'utf-8');
+
+    await page.goto(outputHtmlPath, {
+      waitUntil: ['domcontentloaded', 'networkidle0']
+    });
+
+
+
+
+
+    page.$$('selector', page => page.style.pageBreakBefore = 'always')
+
+
+
+    await page.pdf({
+      path: pdfOutputPath,
+      width: '200mm',
+      height: '297mm',
+      printBackground: false
+    });
+
+
+    await fs.unlink(outputHtmlPath);
+    await browser.close();
 
     console.log(`-- Đã tạo PDF: ${pdfOutputPath} --`);
 
@@ -67,13 +105,15 @@ async function processRecord(record, connection) {
   }
 }
 
+
 async function callProcedure(connection, KeyID, fileNameOnly) {
   try {
     await connection
       .request()
       .input('KeyID_MailMage', sql.UniqueIdentifier, KeyID)
       .input('DuongDan', sql.NVarChar(500), fileNameOnly)
-      .execute('ReturnLinkPDFFromHTML');
+      .query(`EXEC ReturnLinkPDFFromHTML @KeyID_MailMage, @DuongDan`);
+
     console.log(`-- Đã gọi procedure với KeyID: ${KeyID}, File: ${fileNameOnly} --`);
   } catch (err) {
     console.error('❌ Lỗi gọi procedure:', err.message);
