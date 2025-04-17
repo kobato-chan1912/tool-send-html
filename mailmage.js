@@ -23,12 +23,14 @@ async function processRecord(record, connection) {
     let htmlContent = await fs.readFile(htmlPath, 'utf-8');
 
     // Replace AAA01 -> AAA20
-    for (let i = 1; i <= 20; i++) {
-      const key = `AAA${i.toString().padStart(2, '0')}`;
-      const value = record[key] || '';
-      const regex = new RegExp(key, 'g'); // Replace tất cả
-      htmlContent = htmlContent.replace(regex, value);
+    for (const key in record) {
+      if (/^[A-Z]{2,3}\d{2}$/.test(key)) { // ví dụ: BB01, CCC12, AB99
+        const value = record[key] || '';
+        const regex = new RegExp(key, 'g');
+        htmlContent = htmlContent.replace(regex, value);
+      }
     }
+    
 
     // Ghi file HTML kết quả
     await fs.writeFile(outputPath, htmlContent, 'utf-8');
